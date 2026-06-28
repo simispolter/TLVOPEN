@@ -21,12 +21,13 @@ import { StatusBadge } from "./StatusBadge";
 
 export type FilterKey = "all" | SpaceStatus;
 
-export const filters: { key: FilterKey; label: string }[] = [
+const filters: { key: FilterKey; label: string }[] = [
   { key: "all", label: "הכל" },
-  { key: "verified_open", label: "פתוחים" },
-  { key: "official_unverified", label: "מקור רשמי" },
-  { key: "unclear", label: "לא ברור" },
-  { key: "reported_blocked", label: "דווחו כחסומים" },
+  { key: "verified_public_access", label: "מקור מאומת" },
+  { key: "field_verified_open", label: "נבדק בשטח" },
+  { key: "candidate_likely_public", label: "כנראה ציבורי" },
+  { key: "candidate_raw", label: "מועמדים גולמיים" },
+  { key: "reported_blocked", label: "דווח כחסום" },
 ];
 
 type BottomSheetProps = {
@@ -36,6 +37,8 @@ type BottomSheetProps = {
   selectedSpace?: Space;
   activeFilter: FilterKey;
   loading: boolean;
+  researchEnabled: boolean;
+  onResearchToggle: (enabled: boolean) => void;
   onFilterChange: (filter: FilterKey) => void;
   onSelect: (space: Space) => void;
   onClearSelection: () => void;
@@ -43,15 +46,16 @@ type BottomSheetProps = {
 };
 
 function confidenceLabel(confidence: Space["confidence"]) {
-  if (confidence === "field_verified") {
-    return "אומת בשטח";
-  }
+  const labels: Record<Space["confidence"], string> = {
+    raw_candidate_only: "מועמד גולמי בלבד",
+    keyword_likely_public: "מילת מפתח למחקר",
+    official_source_public_wording: "ניסוח ציבורי במקור רשמי",
+    manual_curated_source: "רשומה ידנית עם מקור",
+    field_verified: "אומת בשטח",
+    reported_issue: "דיווח על בעיה",
+  };
 
-  if (confidence === "community_reported") {
-    return "מבוסס דיווח ציבורי";
-  }
-
-  return "מקור רשמי בלבד";
+  return labels[confidence];
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {
@@ -63,6 +67,13 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function isResearchCandidate(space: Space) {
+  return (
+    space.verificationStatus === "candidate_raw" ||
+    space.verificationStatus === "candidate_likely_public"
+  );
+}
+
 export function BottomSheet({
   spaces,
   visibleSpaces,
@@ -70,12 +81,17 @@ export function BottomSheet({
   selectedSpace,
   activeFilter,
   loading,
+  researchEnabled,
+  onResearchToggle,
   onFilterChange,
   onSelect,
   onClearSelection,
   onShare,
 }: BottomSheetProps) {
-  const rankedSpaces = visibleSpaces
+  const mapReadySpaces = visibleSpaces.filter(
+    (space) => space.geometry && space.centroid,
+  );
+  const rankedSpaces = mapReadySpaces
     .map((space) => ({
       space,
       distance: distanceKm(mapCenter, space.centroid),
@@ -88,11 +104,17 @@ export function BottomSheet({
     : undefined;
 
   return (
-    <section className="absolute inset-x-0 bottom-0 z-20 max-h-[68dvh] rounded-t-[28px] border-t border-white/70 bg-background/96 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 shadow-sheet backdrop-blur md:bottom-4 md:left-1/2 md:right-auto md:max-h-[calc(100dvh-2rem)] md:w-[440px] md:-translate-x-1/2 md:rounded-[28px] md:border">
+    <section className="absolute inset-x-0 bottom-0 z-20 max-h-[72dvh] rounded-t-[28px] border-t border-white/70 bg-background/96 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 shadow-sheet backdrop-blur md:bottom-4 md:left-1/2 md:right-auto md:max-h-[calc(100dvh-2rem)] md:w-[460px] md:-translate-x-1/2 md:rounded-[28px] md:border">
       <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-ink/18" />
 
       {selectedSpace ? (
-        <div className="flex max-h-[58dvh] flex-col gap-4 overflow-y-auto pr-1 md:max-h-[calc(100dvh-5rem)]">
+        <div className="flex max-h-[62dvh] flex-col gap-4 overflow-y-auto pr-1 md:max-h-[calc(100dvh-5rem)]">
+          {isResearchCandidate(selectedSpace) ? (
+            <div className="rounded-lg bg-official/20 p-3 text-sm font-extrabold leading-6 text-ink ring-1 ring-official/40">
+              רשומה זו היא מועמדת לבדיקה בלבד. היא אינה הוכחה לכך שהמקום פתוח לציבור.
+            </div>
+          ) : null}
+
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <StatusBadge status={selectedSpace.status} />
@@ -115,7 +137,10 @@ export function BottomSheet({
           </div>
 
           <dl className="grid grid-cols-2 gap-3 rounded-lg bg-white p-4 ring-1 ring-ink/10">
-            <DetailRow label="סטטוס" value={statusMeta[selectedSpace.status].label} />
+            <DetailRow
+              label="סטטוס"
+              value={statusMeta[selectedSpace.status].label}
+            />
             <DetailRow
               label="רמת ודאות"
               value={confidenceLabel(selectedSpace.confidence)}
@@ -179,37 +204,61 @@ export function BottomSheet({
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
               <p className="text-xs font-bold uppercase tracking-normal text-concrete">
-                תל אביב-יפו
+                מאגר מועמדים לבדיקה
               </p>
               <h1 className="text-xl font-black leading-7 text-ink">
-                מרחבים קרובים
+                {researchEnabled ? "שכבת מחקר לא מאומתת" : "מרחבים מאומתים"}
               </h1>
             </div>
             <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-sm font-extrabold text-ink shadow-sm ring-1 ring-ink/10">
               <ChevronUp className="h-4 w-4 text-mapblue" aria-hidden="true" />
-              {visibleSpaces.length.toLocaleString("he-IL")}
+              {mapReadySpaces.length.toLocaleString("he-IL")}
               <span className="text-concrete">/ {spaces.length.toLocaleString("he-IL")}</span>
             </div>
           </div>
 
+          <label className="mb-3 flex min-h-12 items-center justify-between gap-3 rounded-lg bg-white px-3 text-sm font-extrabold text-ink ring-1 ring-ink/10">
+            <span>הצג שכבת מחקר לא מאומתת</span>
+            <input
+              type="checkbox"
+              checked={researchEnabled}
+              onChange={(event) => onResearchToggle(event.target.checked)}
+              className="h-5 w-5 accent-mapblue"
+            />
+          </label>
+
+          {researchEnabled ? (
+            <div className="mb-3 rounded-lg bg-official/20 p-3 text-xs font-bold leading-5 text-ink ring-1 ring-official/40">
+              שכבת המחקר אינה רשימה מאומתת של מרחבים פתוחים לציבור. נדרש אימות מול תוכנית, היתר או בדיקת שטח.
+            </div>
+          ) : null}
+
           <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
-            {filters.map((filter) => {
-              const active = filter.key === activeFilter;
-              return (
-                <button
-                  key={filter.key}
-                  type="button"
-                  onClick={() => onFilterChange(filter.key)}
-                  className={`min-h-10 shrink-0 rounded-full px-4 text-sm font-extrabold ring-1 transition ${
-                    active
-                      ? "bg-ink text-white ring-ink"
-                      : "bg-white text-ink ring-ink/10"
-                  }`}
-                >
-                  {filter.label}
-                </button>
-              );
-            })}
+            {filters
+              .filter((filter) =>
+                researchEnabled
+                  ? true
+                  : !["candidate_likely_public", "candidate_raw"].includes(
+                      filter.key,
+                    ),
+              )
+              .map((filter) => {
+                const active = filter.key === activeFilter;
+                return (
+                  <button
+                    key={filter.key}
+                    type="button"
+                    onClick={() => onFilterChange(filter.key)}
+                    className={`min-h-10 shrink-0 rounded-full px-4 text-sm font-extrabold ring-1 transition ${
+                      active
+                        ? "bg-ink text-white ring-ink"
+                        : "bg-white text-ink ring-ink/10"
+                    }`}
+                  >
+                    {filter.label}
+                  </button>
+                );
+              })}
           </div>
 
           <div className="mb-3 grid grid-cols-2 gap-2 text-xs font-bold text-concrete">
@@ -227,14 +276,16 @@ export function BottomSheet({
             })}
           </div>
 
-          <div className="flex max-h-[34dvh] flex-col gap-3 overflow-y-auto pb-1 pr-1 md:max-h-[calc(100dvh-18rem)]">
+          <div className="flex max-h-[34dvh] flex-col gap-3 overflow-y-auto pb-1 pr-1 md:max-h-[calc(100dvh-21rem)]">
             {loading ? (
               <div className="rounded-lg bg-white p-5 text-center text-sm font-bold text-concrete ring-1 ring-ink/10">
-                טוען מרחבים ציבוריים...
+                טוען נתוני מחקר...
               </div>
             ) : rankedSpaces.length === 0 ? (
-              <div className="rounded-lg bg-white p-5 text-center text-sm font-bold text-concrete ring-1 ring-ink/10">
-                לא נמצאו מרחבים במסנן הנוכחי.
+              <div className="rounded-lg bg-white p-5 text-center text-sm font-bold leading-6 text-concrete ring-1 ring-ink/10">
+                {researchEnabled
+                  ? "לא נמצאו מועמדים עם מיקום מדויק במסנן הנוכחי."
+                  : "עדיין לא נטענו מרחבים מאומתים עם מיקום מדויק. ניתן להציג שכבת מחקר לא מאומתת."}
               </div>
             ) : (
               rankedSpaces.map(({ space, distance }) => (
@@ -251,7 +302,7 @@ export function BottomSheet({
 
           <p className="mt-3 flex items-start gap-2 text-xs font-semibold leading-5 text-concrete">
             <Diamond className="mt-0.5 h-4 w-4 shrink-0 text-official" aria-hidden="true" />
-            הנתונים הם נקודת פתיחה עיתונאית. מקור רשמי אינו מחליף בדיקת שטח או מקור תכנוני מלא.
+            נתונים גולמיים מסומנים לבדיקה בלבד. מקור GIS אינו הוכחה לכך שמקום פתוח לציבור.
           </p>
         </>
       )}

@@ -1,0 +1,69 @@
+{
+  "type": "FeatureCollection",
+  "generatedAt": "2026-06-28T14:31:43.344Z",
+  "summary": {
+    "totalRawFeatures": 1598,
+    "candidate_raw": 1534,
+    "candidate_likely_public": 7,
+    "verified_public_access": 1,
+    "field_verified_open": 0,
+    "reported_blocked": 0,
+    "excluded": 61,
+    "publicFacingCount": 1,
+    "researchOnlyCount": 1541
+  },
+  "visibilityRule": "Includes only verified_public_access, field_verified_open, and reported_blocked with an underlying public right.",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "curated-rothschild-22",
+      "geometry": null,
+      "properties": {
+        "id": "curated-rothschild-22",
+        "sourceLayer": "manual-curated",
+        "sourceObjectId": "rothschild-22",
+        "name": "רוטשילד 22",
+        "address": "שדרות רוטשילד 22",
+        "city": "תל אביב",
+        "geometry": null,
+        "centroid": null,
+        "type": "אטריום / לובי פתוח לציבור",
+        "verificationStatus": "verified_public_access",
+        "confidence": "manual_curated_source",
+        "publicRightSummary": "לפי פרסום ותגובת העירייה, תנאי ההיתר כלל התחייבות לזיקת הנאה ומתן גישה חופשית לשימוש ציבורי באטריום.",
+        "entranceInstructions": "נדרש אימות שטח והזנת נקודת כניסה מדויקת.",
+        "sourceText": "פרסום ותגובת עירייה שדורשים תיעוד מלא בהמשך.",
+        "sourceUrl": "",
+        "reviewNotes": "דוגמת עוגן למרחב פרטי שבו הציבור אמור לקבל גישה או שימוש.",
+        "isPubliclyVisible": true,
+        "status": "verified_public_access",
+        "sourceFields": {},
+        "rawProperties": {
+          "id": "curated-rothschild-22",
+          "sourceLayer": "manual-curated",
+          "sourceObjectId": "rothschild-22",
+          "name": "רוטשילד 22",
+          "address": "שדרות רוטשילד 22",
+          "city": "תל אביב",
+          "geometry": null,
+          "centroid": null,
+          "type": "אטריום / לובי פתוח לציבור",
+          "verificationStatus": "verified_public_access",
+          "confidence": "manual_curated_source",
+          "publicRightSummary": "לפי פרסום ותגובת העירייה, תנאי ההיתר כלל התחייבות לזיקת הנאה ומתן גישה חופשית לשימוש ציבורי באטריום.",
+          "entranceInstructions": "נדרש אימות שטח והזנת נקודת כניסה מדויקת.",
+          "sourceText": "פרסום ותגובת עירייה שדורשים תיעוד מלא בהמשך.",
+          "sourceUrl": "",
+          "reviewNotes": "דוגמת עוגן למרחב פרטי שבו הציבור אמור לקבל גישה או שימוש.",
+          "isPubliclyVisible": true
+        },
+        "classificationReason": "רשומה ידנית שנוספה כמקרה עוגן למחקר והעשרה עתידית.",
+        "matchedPositiveKeywords": [],
+        "matchedStrongPositivePhrases": [],
+        "matchedNegativeKeywords": [],
+        "createdAt": "2026-06-28T14:31:43.255Z",
+        "updatedAt": "2026-06-28T14:31:43.255Z"
+      }
+    }
+  ]
+}

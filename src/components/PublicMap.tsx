@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import { Crosshair, Layers, Search } from "lucide-react";
 import type {
   GeoJSONSource,
@@ -14,10 +15,12 @@ import {
   normalizeSpaces,
   spaceToFeature,
   type RawSpaceFeature,
+  type RawSpaceProperties,
   type Space,
 } from "@/lib/normalizeSpace";
 import { shareSpace } from "@/lib/share";
 import { TEL_AVIV_CENTER, type SpacesCollection } from "@/lib/spaces";
+import { publicVerificationStatuses } from "@/lib/status";
 
 const fillLayerId = "public-spaces-fill";
 const lineLayerId = "public-spaces-line";
@@ -43,10 +46,19 @@ function isSpaceFeature(feature: MapGeoJSONFeature): feature is MapGeoJSONFeatur
   return Boolean(feature.properties?.id);
 }
 
-function featureCollection(spaces: Space[]): SpacesCollection {
+type MapSpacesCollection = FeatureCollection<
+  Polygon | MultiPolygon,
+  RawSpaceProperties
+>;
+
+function featureCollection(spaces: Space[]): MapSpacesCollection {
   return {
     type: "FeatureCollection",
-    features: spaces.map(spaceToFeature),
+    features: spaces
+      .filter((space) => space.geometry)
+      .map((space) => spaceToFeature(space) as RawSpaceFeature & {
+        geometry: Polygon | MultiPolygon;
+      }),
   };
 }
 
@@ -71,6 +83,7 @@ export function PublicMap() {
     useState<[number, number]>(TEL_AVIV_CENTER);
   const [selectedId, setSelectedId] = useState<string>();
   const [activeFilter, setActiveFilter] = useState<FilterKey>("all");
+  const [researchEnabled, setResearchEnabled] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [shareMessage, setShareMessage] = useState("");
@@ -102,8 +115,12 @@ export function PublicMap() {
     }
 
     const bounds = getGeometryBounds(space.geometry);
-    if (!bounds) {
+    if (!bounds && space.centroid) {
       map.flyTo({ center: space.centroid, zoom: 17, duration: 700 });
+      return;
+    }
+
+    if (!bounds) {
       return;
     }
 
@@ -130,6 +147,13 @@ export function PublicMap() {
 
   const handleFilterChange = useCallback((filter: FilterKey) => {
     setActiveFilter(filter);
+    setSelectedId(undefined);
+  }, []);
+
+  const handleResearchToggle = useCallback((enabled: boolean) => {
+    setResearchEnabled(enabled);
+    setLoading(true);
+    setActiveFilter("all");
     setSelectedId(undefined);
   }, []);
 
@@ -168,12 +192,54 @@ export function PublicMap() {
   }, [spaces]);
 
   useEffect(() => {
-    fetch("/data/public-spaces.geojson")
-      .then((response) => response.json() as Promise<SpacesCollection>)
-      .then((data) => setSpaces(normalizeSpaces(data.features as RawSpaceFeature[])))
-      .catch(() => setSpaces([]))
-      .finally(() => setLoading(false));
-  }, []);
+    let cancelled = false;
+
+    const paths = ["/data/public/public-spaces.geojson"];
+    if (researchEnabled) {
+      paths.push("/data/research/research-candidates.geojson");
+    }
+
+    Promise.all(
+      paths.map((path) =>
+        fetch(path).then((response) => {
+          if (!response.ok) {
+            throw new Error(`Failed to load ${path}`);
+          }
+
+          return response.json() as Promise<SpacesCollection>;
+        }),
+      ),
+    )
+      .then((collections) => {
+        if (cancelled) {
+          return;
+        }
+
+        const normalized = collections.flatMap((data) =>
+          normalizeSpaces(data.features as RawSpaceFeature[]),
+        );
+        const spacesForMode = researchEnabled
+          ? normalized
+          : normalized.filter((space) =>
+              publicVerificationStatuses.includes(space.verificationStatus),
+            );
+        setSpaces(spacesForMode);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSpaces([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [researchEnabled]);
 
   useEffect(() => {
     let cancelled = false;
@@ -215,19 +281,29 @@ export function PublicMap() {
             "fill-color": [
               "match",
               ["get", "status"],
-              "verified_open",
+              "field_verified_open",
               "#18A558",
-              "official_unverified",
+              "verified_public_access",
+              "#2563EB",
+              "candidate_likely_public",
               "#F5B700",
-              "unclear",
-              "#F97316",
+              "candidate_raw",
+              "#94A3B8",
               "reported_blocked",
               "#DC2626",
-              "closed",
+              "excluded",
               "#64748B",
               "#F5B700",
             ],
-            "fill-opacity": 0.38,
+            "fill-opacity": [
+              "match",
+              ["get", "status"],
+              "candidate_raw",
+              0.18,
+              "candidate_likely_public",
+              0.24,
+              0.42,
+            ],
           },
         });
 
@@ -330,6 +406,7 @@ export function PublicMap() {
                   className="grid h-11 w-11 place-items-center rounded-full bg-white text-ink shadow-sm ring-1 ring-ink/10"
                   title="שכבות"
                   aria-label="שכבות"
+                  onClick={() => handleResearchToggle(!researchEnabled)}
                 >
                   <Layers className="h-5 w-5" aria-hidden="true" />
                 </button>
@@ -374,6 +451,8 @@ export function PublicMap() {
         selectedSpace={selectedSpace}
         activeFilter={activeFilter}
         loading={loading}
+        researchEnabled={researchEnabled}
+        onResearchToggle={handleResearchToggle}
         onFilterChange={handleFilterChange}
         onSelect={selectSpace}
         onClearSelection={() => setSelectedId(undefined)}

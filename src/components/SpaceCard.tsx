@@ -10,6 +10,25 @@ type SpaceCardProps = {
   onSelect: (space: Space) => void;
 };
 
+function verificationLine(space: Space) {
+  if (space.verificationStatus === "verified_public_access") {
+    return "פתוח לציבור לפי מקור מאומת";
+  }
+
+  if (space.verificationStatus === "field_verified_open") {
+    return "נבדק בשטח ונמצא פתוח";
+  }
+
+  if (
+    space.verificationStatus === "candidate_raw" ||
+    space.verificationStatus === "candidate_likely_public"
+  ) {
+    return "מועמד לבדיקה - לא אומת לציבור";
+  }
+
+  return space.classificationReason || "נדרש אימות נוסף";
+}
+
 export function SpaceCard({
   space,
   distance,
@@ -30,7 +49,7 @@ export function SpaceCard({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={space.status} />
-            {distance !== undefined ? (
+            {distance !== undefined && Number.isFinite(distance) ? (
               <span className="inline-flex h-7 items-center gap-1 rounded-full bg-background px-3 text-xs font-bold text-concrete ring-1 ring-ink/10">
                 <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
                 {distance.toFixed(1)} ק״מ
@@ -43,6 +62,9 @@ export function SpaceCard({
           </h2>
           <p className="mt-1 line-clamp-1 text-sm font-semibold text-concrete">
             {space.address || space.type}
+          </p>
+          <p className="mt-2 text-xs font-black text-ink/70">
+            {verificationLine(space)}
           </p>
         </div>
 
@@ -57,6 +79,7 @@ export function SpaceCard({
           {formatArea(space.areaSqm)}
         </span>
         {space.assetId ? <span>נכס {space.assetId}</span> : null}
+        {space.sourceObjectId ? <span>מזהה מקור {space.sourceObjectId}</span> : null}
       </div>
     </button>
   );

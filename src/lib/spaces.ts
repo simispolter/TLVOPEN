@@ -4,7 +4,7 @@ import type { RawSpaceFeature, RawSpaceProperties } from "@/lib/normalizeSpace";
 export type SpaceFeature = RawSpaceFeature;
 
 export type SpacesCollection = FeatureCollection<
-  Polygon | MultiPolygon,
+  Polygon | MultiPolygon | null,
   RawSpaceProperties
 >;
 
@@ -18,7 +18,11 @@ export function formatArea(areaSqm?: number) {
   return `${Math.round(areaSqm).toLocaleString("he-IL")} מ״ר`;
 }
 
-export function distanceKm(a: [number, number], b: [number, number]) {
+export function distanceKm(a: [number, number], b?: [number, number] | null) {
+  if (!b) {
+    return Number.POSITIVE_INFINITY;
+  }
+
   const toRad = (value: number) => (value * Math.PI) / 180;
   const earthRadiusKm = 6371;
   const dLat = toRad(b[1] - a[1]);

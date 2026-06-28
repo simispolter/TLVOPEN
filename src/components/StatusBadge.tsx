@@ -2,6 +2,7 @@ import {
   CircleCheck,
   CircleHelp,
   FileSearch,
+  FlaskConical,
   Lock,
   OctagonAlert,
 } from "lucide-react";
@@ -18,6 +19,7 @@ const icons = {
   CircleHelp,
   OctagonAlert,
   Lock,
+  FlaskConical,
 };
 
 export function StatusBadge({ status, showIcon = true }: StatusBadgeProps) {

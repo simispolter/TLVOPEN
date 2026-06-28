@@ -9,7 +9,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "seed:gis": "node scripts/convert-kml-to-geojson.mjs"
+    "seed:gis": "node scripts/convert-kml-to-geojson.mjs",
+    "data:fetch:tlv": "node scripts/fetch-tlv-layers.mjs",
+    "data:classify": "node scripts/classify-tlv-candidates.mjs",
+    "data:build": "node scripts/build-public-datasets.mjs",
+    "data:update": "npm run data:fetch:tlv && npm run data:classify && npm run data:build"
   },
   "repository": {
     "type": "git",

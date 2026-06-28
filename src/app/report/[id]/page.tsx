@@ -2,11 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 import { ReportForm } from "@/components/ReportForm";
-import { getAllSpaces, getSpaceById } from "@/lib/spaceData";
-
-export function generateStaticParams() {
-  return getAllSpaces().map((space) => ({ id: space.id }));
-}
+import { getSpaceById } from "@/lib/spaceData";
 
 export default async function ReportPage({
   params,
