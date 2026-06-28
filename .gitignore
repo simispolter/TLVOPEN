@@ -1,0 +1,12 @@
+.next/
+node_modules/
+out/
+build/
+coverage/
+*.log
+.env
+.env*
+!.env.example
+work/
+outputs/
+public/data/*.tmp

@@ -1,0 +1,43 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  background: #f7f3ea;
+  color: #18212b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  font-family: var(--font-sans), Arial, sans-serif;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.maplibregl-ctrl-attrib {
+  direction: ltr;
+}
+
+.maplibregl-popup-content {
+  border-radius: 8px;
+  direction: rtl;
+  padding: 0;
+}
+
+.maplibregl-popup-tip {
+  border-top-color: #ffffff;
+}
