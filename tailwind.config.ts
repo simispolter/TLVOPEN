@@ -9,6 +9,7 @@ const config: Config = {
         ink: "#18212B",
         open: "#18A558",
         official: "#F5B700",
+        unclear: "#F97316",
         problem: "#F97316",
         blocked: "#DC2626",
         mapblue: "#2563EB",

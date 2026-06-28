@@ -1,27 +1,11 @@
-import type { Feature, FeatureCollection, MultiPolygon, Polygon } from "geojson";
+import type { FeatureCollection, MultiPolygon, Polygon } from "geojson";
+import type { RawSpaceFeature, RawSpaceProperties } from "@/lib/normalizeSpace";
 
-export type SpaceStatus = "open" | "official" | "problem" | "blocked";
-
-export type SpaceProperties = {
-  id: string;
-  objectId: number;
-  assetId?: string;
-  name: string;
-  description: string;
-  status: SpaceStatus;
-  source: string;
-  kind: string;
-  areaSqm?: number;
-  perimeterM?: number;
-  importedAt?: string;
-  center: [number, number];
-};
-
-export type SpaceFeature = Feature<Polygon | MultiPolygon, SpaceProperties>;
+export type SpaceFeature = RawSpaceFeature;
 
 export type SpacesCollection = FeatureCollection<
   Polygon | MultiPolygon,
-  SpaceProperties
+  RawSpaceProperties
 >;
 
 export const TEL_AVIV_CENTER: [number, number] = [34.7818, 32.0853];

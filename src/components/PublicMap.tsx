@@ -8,75 +8,171 @@ import type {
   MapGeoJSONFeature,
   StyleSpecification,
 } from "maplibre-gl";
-import { BottomSheet } from "@/components/BottomSheet";
+import { BottomSheet, type FilterKey } from "@/components/BottomSheet";
 import {
-  TEL_AVIV_CENTER,
-  type SpaceFeature,
-  type SpacesCollection,
-} from "@/lib/spaces";
+  getGeometryBounds,
+  normalizeSpaces,
+  spaceToFeature,
+  type RawSpaceFeature,
+  type Space,
+} from "@/lib/normalizeSpace";
+import { shareSpace } from "@/lib/share";
+import { TEL_AVIV_CENTER, type SpacesCollection } from "@/lib/spaces";
 
 const fillLayerId = "public-spaces-fill";
 const lineLayerId = "public-spaces-line";
 const selectedLineLayerId = "public-spaces-selected-line";
 
-const osmStyle: StyleSpecification = {
+const localMapStyle: StyleSpecification = {
   version: 8,
-  sources: {
-    osm: {
-      type: "raster",
-      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-      tileSize: 256,
-      attribution: "© OpenStreetMap contributors",
-    },
-  },
+  sources: {},
   layers: [
     {
-      id: "osm",
-      type: "raster",
-      source: "osm",
+      id: "background",
+      type: "background",
+      paint: {
+        "background-color": "#E8E0D2",
+      },
     },
   ],
 };
 
 function isSpaceFeature(feature: MapGeoJSONFeature): feature is MapGeoJSONFeature & {
-  properties: SpaceFeature["properties"];
+  properties: { id: string };
 } {
   return Boolean(feature.properties?.id);
+}
+
+function featureCollection(spaces: Space[]): SpacesCollection {
+  return {
+    type: "FeatureCollection",
+    features: spaces.map(spaceToFeature),
+  };
+}
+
+function matchesQuery(space: Space, query: string) {
+  const normalizedQuery = query.trim().toLocaleLowerCase("he-IL");
+  if (!normalizedQuery) {
+    return true;
+  }
+
+  return [space.name, space.address, space.type, space.source]
+    .join(" ")
+    .toLocaleLowerCase("he-IL")
+    .includes(normalizedQuery);
 }
 
 export function PublicMap() {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
-  const popupRef = useRef<import("maplibre-gl").Popup | null>(null);
-  const [spaces, setSpaces] = useState<SpaceFeature[]>([]);
+  const spacesRef = useRef<Space[]>([]);
+  const [spaces, setSpaces] = useState<Space[]>([]);
   const [mapCenter, setMapCenter] =
     useState<[number, number]>(TEL_AVIV_CENTER);
   const [selectedId, setSelectedId] = useState<string>();
+  const [activeFilter, setActiveFilter] = useState<FilterKey>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [shareMessage, setShareMessage] = useState("");
 
-  const collection = useMemo<SpacesCollection>(
-    () => ({
-      type: "FeatureCollection",
-      features: spaces,
-    }),
-    [spaces],
+  const visibleSpaces = useMemo(
+    () =>
+      spaces.filter((space) => {
+        const filterMatch =
+          activeFilter === "all" ? true : space.status === activeFilter;
+        return filterMatch && matchesQuery(space, searchQuery);
+      }),
+    [activeFilter, searchQuery, spaces],
   );
 
-  const flyToFeature = useCallback((feature: SpaceFeature) => {
+  const selectedSpace = useMemo(
+    () => spaces.find((space) => space.id === selectedId),
+    [selectedId, spaces],
+  );
+
+  const collection = useMemo(
+    () => featureCollection(visibleSpaces),
+    [visibleSpaces],
+  );
+
+  const fitSpace = useCallback((space: Space) => {
     const map = mapRef.current;
     if (!map) {
       return;
     }
 
-    const [lng, lat] = feature.properties.center;
-    setSelectedId(feature.properties.id);
-    map.flyTo({ center: [lng, lat], zoom: 17, duration: 700 });
+    const bounds = getGeometryBounds(space.geometry);
+    if (!bounds) {
+      map.flyTo({ center: space.centroid, zoom: 17, duration: 700 });
+      return;
+    }
+
+    map.fitBounds(
+      [
+        [bounds.west, bounds.south],
+        [bounds.east, bounds.north],
+      ],
+      {
+        padding: { top: 132, bottom: 380, left: 44, right: 44 },
+        maxZoom: 17,
+        duration: 700,
+      },
+    );
   }, []);
+
+  const selectSpace = useCallback(
+    (space: Space) => {
+      setSelectedId(space.id);
+      fitSpace(space);
+    },
+    [fitSpace],
+  );
+
+  const handleFilterChange = useCallback((filter: FilterKey) => {
+    setActiveFilter(filter);
+    setSelectedId(undefined);
+  }, []);
+
+  const locateUser = useCallback(() => {
+    if (!navigator.geolocation) {
+      mapRef.current?.flyTo({ center: TEL_AVIV_CENTER, zoom: 12.8 });
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        mapRef.current?.flyTo({
+          center: [position.coords.longitude, position.coords.latitude],
+          zoom: 15,
+          duration: 700,
+        });
+      },
+      () => mapRef.current?.flyTo({ center: TEL_AVIV_CENTER, zoom: 12.8 }),
+      { enableHighAccuracy: true, timeout: 6000 },
+    );
+  }, []);
+
+  const handleShare = useCallback(async (space: Space) => {
+    try {
+      const result = await shareSpace(space);
+      setShareMessage(result === "copied" ? "הקישור הועתק" : "השיתוף נפתח");
+      window.setTimeout(() => setShareMessage(""), 2500);
+    } catch {
+      setShareMessage("לא הצלחנו לשתף כרגע");
+      window.setTimeout(() => setShareMessage(""), 2500);
+    }
+  }, []);
+
+  useEffect(() => {
+    spacesRef.current = spaces;
+  }, [spaces]);
 
   useEffect(() => {
     fetch("/data/public-spaces.geojson")
       .then((response) => response.json() as Promise<SpacesCollection>)
-      .then((data) => setSpaces(data.features))
-      .catch(() => setSpaces([]));
+      .then((data) => setSpaces(normalizeSpaces(data.features as RawSpaceFeature[])))
+      .catch(() => setSpaces([]))
+      .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
@@ -94,16 +190,11 @@ export function PublicMap() {
 
       const map = new maplibregl.Map({
         container: mapContainerRef.current,
-        style: osmStyle,
+        style: localMapStyle,
         center: TEL_AVIV_CENTER,
         zoom: 12.4,
         attributionControl: false,
       });
-
-      map.addControl(
-        new maplibregl.AttributionControl({ compact: true }),
-        "bottom-left",
-      );
 
       map.on("moveend", () => {
         const center = map.getCenter();
@@ -113,7 +204,7 @@ export function PublicMap() {
       map.on("load", () => {
         map.addSource("public-spaces", {
           type: "geojson",
-          data: collection,
+          data: featureCollection([]),
         });
 
         map.addLayer({
@@ -124,20 +215,19 @@ export function PublicMap() {
             "fill-color": [
               "match",
               ["get", "status"],
-              "open",
+              "verified_open",
               "#18A558",
-              "problem",
+              "official_unverified",
+              "#F5B700",
+              "unclear",
               "#F97316",
-              "blocked",
+              "reported_blocked",
               "#DC2626",
+              "closed",
+              "#64748B",
               "#F5B700",
             ],
-            "fill-opacity": [
-              "case",
-              ["boolean", ["feature-state", "selected"], false],
-              0.48,
-              0.28,
-            ],
+            "fill-opacity": 0.38,
           },
         });
 
@@ -148,7 +238,7 @@ export function PublicMap() {
           paint: {
             "line-color": "#18212B",
             "line-opacity": 0.45,
-            "line-width": 1.2,
+            "line-width": 1.4,
           },
         });
 
@@ -159,7 +249,7 @@ export function PublicMap() {
           filter: ["==", ["get", "id"], ""],
           paint: {
             "line-color": "#2563EB",
-            "line-width": 3,
+            "line-width": 4,
           },
         });
 
@@ -169,18 +259,12 @@ export function PublicMap() {
             return;
           }
 
-          setSelectedId(feature.properties.id);
-          popupRef.current?.remove();
-          popupRef.current = new maplibregl.Popup({
-            closeButton: false,
-            offset: 16,
-            maxWidth: "280px",
-          })
-            .setLngLat(event.lngLat)
-            .setHTML(
-              `<div style="padding:12px;max-width:280px"><strong style="display:block;margin-bottom:6px">${feature.properties.description}</strong><span style="color:#64748B;font-size:13px">רשום עירוני</span></div>`,
-            )
-            .addTo(map);
+          const space = spacesRef.current.find(
+            (item) => item.id === feature.properties.id,
+          );
+          if (space) {
+            selectSpace(space);
+          }
         });
 
         map.on("mouseenter", fillLayerId, () => {
@@ -199,11 +283,10 @@ export function PublicMap() {
 
     return () => {
       cancelled = true;
-      popupRef.current?.remove();
       mapRef.current?.remove();
       mapRef.current = null;
     };
-  }, [collection]);
+  }, [selectSpace]);
 
   useEffect(() => {
     const source = mapRef.current?.getSource("public-spaces") as
@@ -230,53 +313,71 @@ export function PublicMap() {
       <div ref={mapContainerRef} className="absolute inset-0" />
 
       <header className="pointer-events-none absolute inset-x-0 top-0 z-20 px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))]">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
-          <div className="pointer-events-auto rounded-full bg-background/94 px-4 py-3 shadow-float ring-1 ring-white/70 backdrop-blur">
-            <p className="text-lg font-black leading-none text-ink">פתוח לציבור</p>
-          </div>
+        <div className="mx-auto flex max-w-6xl flex-col gap-3">
+          <div className="pointer-events-auto rounded-2xl bg-background/94 p-4 shadow-float ring-1 ring-white/70 backdrop-blur">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xl font-black leading-none text-ink">
+                  פתוח לציבור
+                </p>
+                <p className="mt-2 text-sm font-bold leading-5 text-concrete">
+                  מפה של מרחבים פרטיים שאמורים להיות נגישים לציבור
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  className="grid h-11 w-11 place-items-center rounded-full bg-white text-ink shadow-sm ring-1 ring-ink/10"
+                  title="שכבות"
+                  aria-label="שכבות"
+                >
+                  <Layers className="h-5 w-5" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  onClick={locateUser}
+                  className="grid h-11 w-11 place-items-center rounded-full bg-mapblue text-white shadow-sm"
+                  title="איתור המיקום שלי"
+                  aria-label="איתור המיקום שלי"
+                >
+                  <Crosshair className="h-5 w-5" aria-hidden="true" />
+                </button>
+              </div>
+            </div>
 
-          <div className="pointer-events-auto flex items-center gap-2">
-            <button
-              type="button"
-              className="grid h-11 w-11 place-items-center rounded-full bg-white text-ink shadow-float ring-1 ring-ink/10"
-              title="חיפוש"
-              aria-label="חיפוש"
-            >
-              <Search className="h-5 w-5" aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              className="grid h-11 w-11 place-items-center rounded-full bg-white text-ink shadow-float ring-1 ring-ink/10"
-              title="שכבות"
-              aria-label="שכבות"
-            >
-              <Layers className="h-5 w-5" aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              onClick={() => mapRef.current?.flyTo({ center: TEL_AVIV_CENTER, zoom: 12.4 })}
-              className="grid h-11 w-11 place-items-center rounded-full bg-mapblue text-white shadow-float"
-              title="מרכז תל אביב"
-              aria-label="מרכז תל אביב"
-            >
-              <Crosshair className="h-5 w-5" aria-hidden="true" />
-            </button>
+            <label className="mt-4 flex min-h-12 items-center gap-2 rounded-full bg-white px-4 text-ink shadow-sm ring-1 ring-ink/10">
+              <Search className="h-5 w-5 shrink-0 text-concrete" aria-hidden="true" />
+              <input
+                value={searchQuery}
+                onChange={(event) => {
+                  setSearchQuery(event.target.value);
+                  setSelectedId(undefined);
+                }}
+                placeholder="חפש כתובת, רחוב או מקום"
+                className="h-11 min-w-0 flex-1 bg-transparent text-sm font-bold outline-none placeholder:text-concrete"
+              />
+            </label>
           </div>
         </div>
       </header>
 
-      <div className="pointer-events-none absolute bottom-[50dvh] right-4 z-10 hidden rounded-lg bg-white/94 p-3 shadow-float ring-1 ring-ink/10 backdrop-blur sm:block">
-        <div className="flex items-center gap-2 text-xs font-bold text-concrete">
-          <span className="h-3 w-3 rounded-sm bg-official" />
-          זיקת הנאה רשומה
+      {shareMessage ? (
+        <div className="absolute left-1/2 top-[10rem] z-30 -translate-x-1/2 rounded-full bg-ink px-4 py-2 text-sm font-black text-white shadow-float">
+          {shareMessage}
         </div>
-      </div>
+      ) : null}
 
       <BottomSheet
         spaces={spaces}
+        visibleSpaces={visibleSpaces}
         mapCenter={mapCenter}
-        selectedId={selectedId}
-        onSelect={flyToFeature}
+        selectedSpace={selectedSpace}
+        activeFilter={activeFilter}
+        loading={loading}
+        onFilterChange={handleFilterChange}
+        onSelect={selectSpace}
+        onClearSelection={() => setSelectedId(undefined)}
+        onShare={handleShare}
       />
     </main>
   );
